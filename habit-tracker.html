@@ -1,0 +1,217 @@
+<!-- HABIT TRACKER WIDGET — Paste this into Blogger > Layout > Add a Gadget > HTML/JavaScript -->
+<!-- OR in a post: Switch to HTML view and paste here -->
+
+<style>
+  #ht-wrap { font-family: system-ui, sans-serif; max-width: 720px; margin: 0 auto; padding: 20px; }
+  #ht-wrap h2 { font-size: 20px; margin-bottom: 4px; }
+  #ht-wrap p.sub { color: #888; font-size: 13px; margin-bottom: 16px; }
+  #ht-table { width: 100%; border-collapse: collapse; font-size: 14px; overflow-x: auto; display: block; }
+  #ht-table th { padding: 9px 8px; border-bottom: 2px solid #e8e8e8; font-size: 12px; color: #444; white-space: nowrap; }
+  #ht-table td { padding: 9px 8px; border-bottom: 1px solid #f0f0f0; white-space: nowrap; }
+  #ht-table tr:nth-child(even) { background: #fafafa; }
+  .ht-today { background: #e8f4ff !important; color: #1a73e8 !important; }
+  .ht-cb { width: 16px; height: 16px; cursor: pointer; accent-color: #1a73e8; }
+  .ht-cb:disabled { cursor: default; opacity: 0.4; }
+  .ht-bar-wrap { background: #f0f0f0; border-radius: 8px; overflow: hidden; height: 6px; width: 48px; margin: 0 auto 2px; }
+  .ht-bar { height: 100%; border-radius: 8px; transition: width 0.3s; }
+  .ht-pct { font-size: 11px; color: #666; }
+  .ht-streak { font-size: 13px; }
+  .ht-del { background: none; border: none; cursor: pointer; color: #ccc; font-size: 14px; line-height: 1; }
+  .ht-del:hover { color: #e44; }
+  #ht-add-row { display: flex; gap: 8px; margin-top: 14px; }
+  #ht-new-input { flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; }
+  #ht-add-btn { background: #1a73e8; color: #fff; border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; font-size: 14px; font-weight: 500; }
+  #ht-add-btn:hover { background: #1558b0; }
+</style>
+
+<div id="ht-wrap">
+  <h2>🗓️ Habit Tracker</h2>
+  <p class="sub" id="ht-week-label"></p>
+  <div style="overflow-x:auto">
+    <table id="ht-table">
+      <thead id="ht-thead"></thead>
+      <tbody id="ht-tbody"></tbody>
+    </table>
+  </div>
+  <div id="ht-add-row">
+    <input id="ht-new-input" type="text" placeholder="Add a new habit..." />
+    <button id="ht-add-btn">+ Add</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  const STORAGE_KEY = "ht_data_v1";
+  const DEFAULT_HABITS = ["Early Wakeup", "Exercise", "Read", "Drink Water", "Meditate"];
+  const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+  function fmt(d) {
+    return d.toISOString().split("T")[0];
+  }
+
+  function getWeekDates() {
+    const today = new Date();
+    const day = today.getDay();
+    const mon = new Date(today);
+    mon.setDate(today.getDate() - ((day + 6) % 7));
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(mon);
+      d.setDate(mon.getDate() + i);
+      return d;
+    });
+  }
+
+  function loadData() {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+    } catch { return {}; }
+  }
+
+  function saveData(data) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }
+
+  const weekDates = getWeekDates();
+  const todayStr = fmt(new Date());
+  let data = loadData();
+  if (!data.habits) data.habits = DEFAULT_HABITS;
+  if (!data.checked) data.checked = {};
+
+  // Week label
+  const opts = { month: "short", day: "numeric" };
+  document.getElementById("ht-week-label").textContent =
+    "Week of " + weekDates[0].toLocaleDateString("en-US", opts) +
+    " – " + weekDates[6].toLocaleDateString("en-US", opts);
+
+  function isChecked(habit, date) {
+    return !!data.checked[habit + "__" + date];
+  }
+
+  function streak(habit) {
+    let s = 0;
+    for (let i = weekDates.length - 1; i >= 0; i--) {
+      const d = fmt(weekDates[i]);
+      if (d > todayStr) continue;
+      if (isChecked(habit, d)) s++;
+      else break;
+    }
+    return s;
+  }
+
+  function pct(habit) {
+    const pastDays = weekDates.filter(d => fmt(d) <= todayStr);
+    const done = pastDays.filter(d => isChecked(habit, fmt(d))).length;
+    return pastDays.length ? Math.round((done / pastDays.length) * 100) : 0;
+  }
+
+  function render() {
+    // Header
+    const thead = document.getElementById("ht-thead");
+    thead.innerHTML = "";
+    const hr = document.createElement("tr");
+    const th0 = document.createElement("th");
+    th0.textContent = "Habit";
+    th0.style.textAlign = "left";
+    hr.appendChild(th0);
+    weekDates.forEach((d, i) => {
+      const th = document.createElement("th");
+      th.style.textAlign = "center";
+      if (fmt(d) === todayStr) th.className = "ht-today";
+      th.innerHTML = `<div style="font-weight:600">${DAYS[i]}</div><div style="color:#999;font-weight:400">${d.getDate()}</div>`;
+      hr.appendChild(th);
+    });
+    ["%" , "🔥", ""].forEach(label => {
+      const th = document.createElement("th");
+      th.textContent = label;
+      th.style.textAlign = "center";
+      hr.appendChild(th);
+    });
+    thead.appendChild(hr);
+
+    // Body
+    const tbody = document.getElementById("ht-tbody");
+    tbody.innerHTML = "";
+    data.habits.forEach(habit => {
+      const tr = document.createElement("tr");
+
+      // Habit name
+      const tdName = document.createElement("td");
+      tdName.textContent = habit;
+      tdName.style.fontWeight = "500";
+      tr.appendChild(tdName);
+
+      // Checkboxes
+      weekDates.forEach(d => {
+        const dateStr = fmt(d);
+        const td = document.createElement("td");
+        td.style.textAlign = "center";
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.className = "ht-cb";
+        cb.checked = isChecked(habit, dateStr);
+        cb.disabled = dateStr > todayStr;
+        cb.addEventListener("change", () => {
+          data.checked[habit + "__" + dateStr] = cb.checked;
+          saveData(data);
+          render();
+        });
+        td.appendChild(cb);
+        tr.appendChild(td);
+      });
+
+      // % bar
+      const p = pct(habit);
+      const tdPct = document.createElement("td");
+      tdPct.style.textAlign = "center";
+      const barColor = p >= 70 ? "#34a853" : p >= 40 ? "#fbbc04" : "#ea4335";
+      tdPct.innerHTML = `<div class="ht-bar-wrap"><div class="ht-bar" style="width:${p}%;background:${barColor}"></div></div><span class="ht-pct">${p}%</span>`;
+      tr.appendChild(tdPct);
+
+      // Streak
+      const s = streak(habit);
+      const tdS = document.createElement("td");
+      tdS.style.textAlign = "center";
+      tdS.className = "ht-streak";
+      tdS.style.color = s > 0 ? "#e37400" : "#ccc";
+      tdS.textContent = s > 0 ? s : "–";
+      tr.appendChild(tdS);
+
+      // Delete
+      const tdDel = document.createElement("td");
+      tdDel.style.textAlign = "center";
+      const btn = document.createElement("button");
+      btn.className = "ht-del";
+      btn.textContent = "✕";
+      btn.title = "Remove habit";
+      btn.addEventListener("click", () => {
+        data.habits = data.habits.filter(h => h !== habit);
+        saveData(data);
+        render();
+      });
+      tdDel.appendChild(btn);
+      tr.appendChild(tdDel);
+
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Add habit
+  const input = document.getElementById("ht-new-input");
+  const addBtn = document.getElementById("ht-add-btn");
+
+  function addHabit() {
+    const h = input.value.trim();
+    if (h && !data.habits.includes(h)) {
+      data.habits.push(h);
+      saveData(data);
+      input.value = "";
+      render();
+    }
+  }
+
+  addBtn.addEventListener("click", addHabit);
+  input.addEventListener("keydown", e => { if (e.key === "Enter") addHabit(); });
+
+  render();
+})();
+</script>
